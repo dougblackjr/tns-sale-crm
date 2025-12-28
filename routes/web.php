@@ -16,4 +16,5 @@ Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified']
     Route::patch('/crm/projects/{project}', [CrmController::class, 'updateProject'])->name('crm.projects.update');
     Route::patch('/crm/projects/{project}/stage', [CrmController::class, 'updateProjectStage'])->name('crm.projects.stage');
     Route::delete('/crm/projects/{project}', [CrmController::class, 'deleteProject'])->name('crm.projects.destroy');
+    Route::post('/crm/tags', [CrmController::class, 'storeTag'])->name('crm.tags.store');
 });

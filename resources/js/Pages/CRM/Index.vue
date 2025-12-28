@@ -1,4 +1,4 @@
-<!-- resources/js/Pages/CRM/Index.vue -->
+<!-- resources/js/Pages/CRM/Index.vue - replace entire file -->
 <script setup>
 import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
@@ -11,13 +11,16 @@ const props = defineProps({
     stats: Object,
     companies: Array,
     contacts: Array,
+    tags: Array,
     stages: Object,
 });
 
 const showProjectModal = ref(false);
 const showCompanyModal = ref(false);
 const showContactModal = ref(false);
+const showTagModal = ref(false);
 const editingProject = ref(null);
+const selectedTagFilter = ref(null);
 
 const projectForm = ref({
     company_id: null,
@@ -26,6 +29,7 @@ const projectForm = ref({
     stage: 'lead',
     notes: '',
     contact_ids: [],
+    tag_ids: [],
 });
 
 const companyForm = ref({
@@ -44,15 +48,44 @@ const contactForm = ref({
     notes: '',
 });
 
-// Organize projects by stage
+const tagForm = ref({
+    name: '',
+    color: '#3B82F6',
+});
+
+const tagColors = [
+    '#3B82F6', // Blue
+    '#10B981', // Green
+    '#F59E0B', // Yellow
+    '#EF4444', // Red
+    '#8B5CF6', // Purple
+    '#EC4899', // Pink
+    '#06B6D4', // Cyan
+    '#F97316', // Orange
+];
+
+// Organize projects by stage with tag filtering
 const kanbanStages = computed(() => {
     const activeStages = Object.keys(props.stages).filter(s => !['won', 'lost'].includes(s));
-    return activeStages.map(stageKey => ({
-        key: stageKey,
-        label: props.stages[stageKey],
-        projects: props.projects[stageKey] || [],
-        value: props.stageValues[stageKey] || 0,
-    }));
+    return activeStages.map(stageKey => {
+        let stageProjects = props.projects[stageKey] || [];
+        
+        // Filter by selected tag
+        if (selectedTagFilter.value) {
+            stageProjects = stageProjects.filter(project => 
+                project.tags.some(tag => tag.id === selectedTagFilter.value)
+            );
+        }
+
+        const stageValue = stageProjects.reduce((sum, p) => sum + parseFloat(p.value), 0);
+
+        return {
+            key: stageKey,
+            label: props.stages[stageKey],
+            projects: stageProjects,
+            value: stageValue,
+        };
+    });
 });
 
 const formatCurrency = (value) => {
@@ -72,6 +105,7 @@ const openProjectModal = (project = null) => {
             stage: project.stage,
             notes: project.notes || '',
             contact_ids: project.contacts.map(c => c.id),
+            tag_ids: project.tags.map(t => t.id),
         };
     } else {
         editingProject.value = null;
@@ -82,6 +116,7 @@ const openProjectModal = (project = null) => {
             stage: 'lead',
             notes: '',
             contact_ids: [],
+            tag_ids: [],
         };
     }
     showProjectModal.value = true;
@@ -117,6 +152,15 @@ const saveContact = () => {
         onSuccess: () => {
             showContactModal.value = false;
             contactForm.value = { company_id: null, name: '', email: '', phone: '', title: '', notes: '' };
+        },
+    });
+};
+
+const saveTag = () => {
+    router.post(route('crm.tags.store'), tagForm.value, {
+        onSuccess: () => {
+            showTagModal.value = false;
+            tagForm.value = { name: '', color: '#3B82F6' };
         },
     });
 };
@@ -167,7 +211,7 @@ const companyContacts = computed(() => {
                 </div>
 
                 <!-- Action Buttons -->
-                <div class="mb-4 flex gap-2">
+                <div class="mb-4 flex gap-2 items-center">
                     <button @click="openProjectModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
                         + New Project
                     </button>
@@ -177,6 +221,34 @@ const companyContacts = computed(() => {
                     <button @click="showContactModal = true" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
                         + New Contact
                     </button>
+                    <button @click="showTagModal = true" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                        + New Tag
+                    </button>
+
+                    <div class="ml-auto flex items-center gap-2">
+                        <span class="text-sm text-gray-600">Filter by tag:</span>
+                        <button 
+                            @click="selectedTagFilter = null"
+                            :class="[
+                                'px-3 py-1 rounded text-sm',
+                                selectedTagFilter === null ? 'bg-gray-800 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            ]"
+                        >
+                            All
+                        </button>
+                        <button 
+                            v-for="tag in tags" 
+                            :key="tag.id"
+                            @click="selectedTagFilter = tag.id"
+                            :class="[
+                                'px-3 py-1 rounded text-sm text-white',
+                                selectedTagFilter === tag.id ? 'ring-2 ring-offset-2 ring-gray-800' : ''
+                            ]"
+                            :style="{ backgroundColor: tag.color }"
+                        >
+                            {{ tag.name }}
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Kanban Board -->
@@ -210,6 +282,19 @@ const companyContacts = computed(() => {
                                         </div>
                                         <p class="text-xs text-gray-600 mb-1">{{ project.company.name }}</p>
                                         <p class="text-sm font-bold text-green-600">{{ formatCurrency(project.value) }}</p>
+                                        
+                                        <!-- Tags -->
+                                        <div v-if="project.tags.length" class="flex flex-wrap gap-1 mt-2">
+                                            <span 
+                                                v-for="tag in project.tags" 
+                                                :key="tag.id"
+                                                class="text-xs px-2 py-0.5 rounded text-white"
+                                                :style="{ backgroundColor: tag.color }"
+                                            >
+                                                {{ tag.name }}
+                                            </span>
+                                        </div>
+
                                         <div v-if="project.contacts.length" class="mt-2 text-xs text-gray-500">
                                             👤 {{ project.contacts.map(c => c.name).join(', ') }}
                                         </div>
@@ -225,7 +310,7 @@ const companyContacts = computed(() => {
 
         <!-- Project Modal -->
         <div v-if="showProjectModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
                 <h2 class="text-xl font-bold mb-4">{{ editingProject ? 'Edit Project' : 'New Project' }}</h2>
                 
                 <div class="space-y-4">
@@ -254,6 +339,21 @@ const companyContacts = computed(() => {
                         <select v-model="projectForm.stage" class="w-full border rounded px-3 py-2">
                             <option v-for="(label, key) in stages" :key="key" :value="key">{{ label }}</option>
                         </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Tags</label>
+                        <div class="flex flex-wrap gap-2">
+                            <label v-for="tag in tags" :key="tag.id" class="flex items-center">
+                                <input type="checkbox" :value="tag.id" v-model="projectForm.tag_ids" class="mr-1">
+                                <span 
+                                    class="text-xs px-2 py-1 rounded text-white"
+                                    :style="{ backgroundColor: tag.color }"
+                                >
+                                    {{ tag.name }}
+                                </span>
+                            </label>
+                        </div>
                     </div>
 
                     <div v-if="companyContacts.length">
@@ -360,6 +460,43 @@ const companyContacts = computed(() => {
                         Cancel
                     </button>
                     <button @click="saveContact" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tag Modal -->
+        <div v-if="showTagModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                <h2 class="text-xl font-bold mb-4">New Tag</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Tag Name</label>
+                        <input v-model="tagForm.name" type="text" class="w-full border rounded px-3 py-2" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Color</label>
+                        <div class="flex gap-2 flex-wrap">
+                            <button
+                                v-for="color in tagColors"
+                                :key="color"
+                                type="button"
+                                @click="tagForm.color = color"
+                                class="w-10 h-10 rounded"
+                                :class="{ 'ring-2 ring-offset-2 ring-gray-800': tagForm.color === color }"
+                                :style="{ backgroundColor: color }"
+                            ></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 mt-6">
+                    <button @click="showTagModal = false" class="px-4 py-2 text-gray-600 hover:text-gray-800">
+                        Cancel
+                    </button>
+                    <button @click="saveTag" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
                         Save
                     </button>
                 </div>

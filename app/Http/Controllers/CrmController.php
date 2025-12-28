@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Models\Contact;
 use App\Models\Project;
+use App\Models\Tag;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -13,7 +14,7 @@ class CrmController extends Controller
 {
     public function index(): Response
     {
-        $projects = Project::with(['company', 'contacts'])
+        $projects = Project::with(['company', 'contacts', 'tags'])
             ->whereNotIn('stage', ['won', 'lost'])
             ->orderBy('position')
             ->get()
@@ -41,6 +42,7 @@ class CrmController extends Controller
             'stats' => $stats,
             'companies' => Company::orderBy('name')->get(),
             'contacts' => Contact::with('company')->orderBy('name')->get(),
+            'tags' => Tag::orderBy('name')->get(),
             'stages' => Project::STAGES,
         ]);
     }
@@ -93,10 +95,13 @@ class CrmController extends Controller
             'notes' => 'nullable|string',
             'contact_ids' => 'nullable|array',
             'contact_ids.*' => 'exists:contacts,id',
+            'tag_ids' => 'nullable|array',
+            'tag_ids.*' => 'exists:tags,id',
         ]);
 
         $contactIds = $validated['contact_ids'] ?? [];
-        unset($validated['contact_ids']);
+        $tagIds = $validated['tag_ids'] ?? [];
+        unset($validated['contact_ids'], $validated['tag_ids']);
 
         $project = Project::create($validated);
         
@@ -104,7 +109,11 @@ class CrmController extends Controller
             $project->contacts()->attach($contactIds);
         }
 
-        return $project->load(['company', 'contacts']);
+        if (!empty($tagIds)) {
+            $project->tags()->attach($tagIds);
+        }
+
+        return $project->load(['company', 'contacts', 'tags']);
     }
 
     public function updateProject(Request $request, Project $project)
@@ -117,6 +126,8 @@ class CrmController extends Controller
             'position' => 'sometimes|integer',
             'contact_ids' => 'nullable|array',
             'contact_ids.*' => 'exists:contacts,id',
+            'tag_ids' => 'nullable|array',
+            'tag_ids.*' => 'exists:tags,id',
         ]);
 
         if (isset($validated['contact_ids'])) {
@@ -124,9 +135,24 @@ class CrmController extends Controller
             unset($validated['contact_ids']);
         }
 
+        if (isset($validated['tag_ids'])) {
+            $project->tags()->sync($validated['tag_ids']);
+            unset($validated['tag_ids']);
+        }
+
         $project->update($validated);
 
-        return $project->load(['company', 'contacts']);
+        return $project->load(['company', 'contacts', 'tags']);
+    }
+
+    public function storeTag(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255|unique:tags',
+            'color' => 'required|string|regex:/^#[0-9A-Fa-f]{6}$/',
+        ]);
+
+        return Tag::create($validated);
     }
 
     public function updateProjectStage(Request $request, Project $project)
