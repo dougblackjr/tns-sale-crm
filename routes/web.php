@@ -1,24 +1,19 @@
 <?php
 
+use App\Http\Controllers\CrmController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
+Route::redirect('/', '/crm');
 
-Route::middleware([
-    'auth:sanctum',
-    config('jetstream.auth_session'),
-    'verified',
-])->group(function () {
-    Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard');
-    })->name('dashboard');
+Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified'])->group(function () {
+    Route::get('/crm', [CrmController::class, 'index'])->name('crm.index');
+    
+    Route::post('/crm/companies', [CrmController::class, 'storeCompany'])->name('crm.companies.store');
+    Route::post('/crm/contacts', [CrmController::class, 'storeContact'])->name('crm.contacts.store');
+    Route::post('/crm/projects', [CrmController::class, 'storeProject'])->name('crm.projects.store');
+    Route::patch('/crm/projects/{project}', [CrmController::class, 'updateProject'])->name('crm.projects.update');
+    Route::patch('/crm/projects/{project}/stage', [CrmController::class, 'updateProjectStage'])->name('crm.projects.stage');
+    Route::delete('/crm/projects/{project}', [CrmController::class, 'deleteProject'])->name('crm.projects.destroy');
 });
